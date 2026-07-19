@@ -13,10 +13,22 @@ from telegram.ext import (
 )
 import os
 
-# Bot Token
-with open ("config.json", "r") as f:
-    config = json.load(f)
-TOKEN = config["BOT_TOKEN"]
+try:
+    TOKEN = os.getenv("BOT_TOKEN")
+
+    if TOKEN is None:
+        with open("config.json", "r") as f:
+            config = json.load(f)
+        TOKEN = config["BOT_TOKEN"]
+
+except FileNotFoundError:
+    print("config.json not found.")
+except KeyError:
+    print("BOT_TOKEN not found.")
+except json.JSONDecodeError:
+    print("Invalid JSON in config.json.")
+except Exception as e:
+    print("Error occurred:", e)
 
 
 # ------------------------------
