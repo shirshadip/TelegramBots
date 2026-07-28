@@ -12,23 +12,34 @@ from telegram.ext import (
     filters,
 )
 import os
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
 try:
     TOKEN = os.getenv("BOT_TOKEN")
 
     if TOKEN is None:
-        with open("config.json", "r") as f:
+        with open(CONFIG_PATH, "r") as f:
             config = json.load(f)
         TOKEN = config["BOT_TOKEN"]
 
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN is missing. Set BOT_TOKEN environment variable or add it to config.json.")
+
 except FileNotFoundError:
-    print("config.json not found.")
+    print(f"config.json not found at {CONFIG_PATH}.")
+    sys.exit(1)
 except KeyError:
-    print("BOT_TOKEN not found.")
+    print("BOT_TOKEN not found in config.json.")
+    sys.exit(1)
 except json.JSONDecodeError:
     print("Invalid JSON in config.json.")
+    sys.exit(1)
 except Exception as e:
     print("Error occurred:", e)
+    sys.exit(1)
 
 
 # ------------------------------
