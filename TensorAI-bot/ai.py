@@ -8,26 +8,40 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-
 async def ask_ai(messages):
-
-    payload = {
-        "model": MODEL,
-        "messages": messages
-    }
-
     timeout = httpx.Timeout(60)
 
     async with httpx.AsyncClient(timeout=timeout) as client:
 
-        response = await client.post(
-            URL,
-            headers=HEADERS,
-            json=payload
-        )
+        last_error = None
 
-        response.raise_for_status()
+        for model in MODELS:
+            payload = {
+                "model": model,
+                "messages": messages,
+            }
 
-        data = response.json()
+            try:
+                print(f"Trying model: {model}")
 
-        return data["choices"][0]["message"]["content"]
+                response = await client.post(
+                    URL,
+                    headers=HEADERS,
+                    json=payload,
+                )
+
+                response.raise_for_status()
+
+                data = response.json()
+
+                return data["choices"][0]["message"]["content"]
+
+            except httpx.HTTPStatusError as e:
+                print(f"{model} failed")
+                print(e.response.status_code)
+                print(e.response.text)
+                last_error = e
+
+        raise last_error
+    
+print ("Model", model)
