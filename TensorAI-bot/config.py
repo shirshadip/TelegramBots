@@ -17,10 +17,10 @@ if os.path.isfile(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON in config.json: {e}")
+        print(f"❌ Invalid JSON in config.json: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Failed to load config.json: {e}")
+        print(f"❌ Failed to load config.json: {e}")
         sys.exit(1)
 
 # -------------------------------
@@ -31,16 +31,18 @@ BOT_TOKEN = (
     or config.get("BOT_TOKEN")
 )
 
-OPENROUTER_API_KEY = (
-    os.getenv("OPENROUTER_API_KEY")
-    or config.get("OPENROUTER_API_KEY")
+NVIDIA_API_KEY = (
+    os.getenv("NVIDIA_API_KEY")
+    or config.get("NVIDIA_API_KEY")
 )
 
 # -------------------------------
 # Default model fallback order
+# Use official NVIDIA model identifiers
 # -------------------------------
 DEFAULT_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b"
+    "nvidia/nemotron-3-super-128b-instruct-qwen",
+    "nvidia/nemotron-4-340b-instruct",
 ]
 
 # -------------------------------
@@ -76,7 +78,7 @@ for model in models + DEFAULT_MODELS:
         MODELS.append(model)
         seen.add(model)
 
-# Primary model
+# Primary model (for reference)
 MODEL = MODELS[0]
 
 # -------------------------------
@@ -90,13 +92,33 @@ try:
 except (TypeError, ValueError):
     MAX_HISTORY = 10
 
+# Ensure MAX_HISTORY is at least 2 (1 for system, 1 for actual chat)
+if MAX_HISTORY < 2:
+    MAX_HISTORY = 2
+
 # -------------------------------
 # Validation
 # -------------------------------
 if not BOT_TOKEN:
-    print("Error: BOT_TOKEN is missing.")
+    print("❌ Error: BOT_TOKEN is missing.")
+    print("   Set it in .env or config.json")
     sys.exit(1)
 
-if not OPENROUTER_API_KEY:
-    print("Error: OPENROUTER_API_KEY is missing.")
+if not NVIDIA_API_KEY:
+    print("❌ Error: NVIDIA_API_KEY is missing.")
+    print("   Set it in .env or config.json")
+    print("   Get your API key from: https://build.nvidia.com/")
     sys.exit(1)
+
+if not MODELS:
+    print("❌ Error: No models configured.")
+    print("   Add MODEL or MODELS to .env or config.json")
+    sys.exit(1)
+
+# Print startup info
+print("✅ Configuration loaded successfully")
+print(f"   BOT_TOKEN: {'***' + BOT_TOKEN[-4:] if len(BOT_TOKEN) > 4 else '***'}")
+print(f"   NVIDIA_API_KEY: {'***' + NVIDIA_API_KEY[-8:] if len(NVIDIA_API_KEY) > 8 else '***'}")
+print(f"   Available models: {len(MODELS)}")
+print(f"   Primary model: {MODEL}")
+print(f"   Max history: {MAX_HISTORY}")

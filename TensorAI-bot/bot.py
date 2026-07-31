@@ -15,17 +15,16 @@ import httpx
 
 from pylatexenc.latex2text import LatexNodes2Text
 
-from config import *
+from config import BOT_TOKEN, MAX_HISTORY, MODEL
 from ai import ask_ai
 
 
 logging.basicConfig(
-
     level=logging.INFO,
-
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
+logger = logging.getLogger(__name__)
 
 conversation_memory = {}
 
@@ -169,11 +168,7 @@ $$
 ...
 $$
 
-- Use inline math like
-
-$ x^2 $
-
-only for short expressions.
+- Use inline math like $ x^2 $ only for short expressions.
 
 ---
 
@@ -268,69 +263,62 @@ Every response should help the user understand the subject deeply, solve the pro
 """
 
 
-# -----------------------------
+# ===========================
+# Command Handlers
+# ===========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    conversation_memory[update.effective_user.id] = [
-
+    """Initialize conversation with system prompt."""
+    user_id = update.effective_user.id
+    
+    conversation_memory[user_id] = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT
         }
-
     ]
 
     await update.message.reply_text(
-
         "👋 Hello!\n\n"
-        "I'm your AI assistant.\n\n"
-        "Just send me any question."
+        "I'm **Tensor AI**, your AI assistant for science, math, and engineering.\n\n"
+        "Just send me any question and I'll help you understand it deeply.\n\n"
+        "📌 Commands:\n"
+        "/help - Show available commands\n"
+        "/clear - Clear conversation history"
     )
 
-
-# -----------------------------
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+    """Show available commands."""
     await update.message.reply_text(
-
-"""
-Available Commands
-
-/start
-
-/help
-
-/clear
-
-Simply send a message to chat with AI.
-"""
+        "📚 **Available Commands**\n\n"
+        "/start - Start a new conversation\n"
+        "/help - Show this message\n"
+        "/clear - Clear conversation history\n\n"
+        "💬 Just send any message to chat with me!"
     )
 
 
-# -----------------------------
-
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    conversation_memory[update.effective_user.id] = [
-
+    """Clear conversation history."""
+    user_id = update.effective_user.id
+    
+    conversation_memory[user_id] = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT
         }
-
     ]
 
-    await update.message.reply_text(
-
-        "✅ Conversation cleared."
-    )
+    await update.message.reply_text("✅ Conversation cleared. Start fresh!")
 
 
-# -----------------------------
+# ===========================
+# AI Chat Handler
+# ===========================
 
 async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle incoming messages and generate AI responses."""
     message = update.effective_message
     user = update.effective_user
 
@@ -344,28 +332,36 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("Please send a text message.")
         return
 
+    # Initialize conversation if needed
     if user_id not in conversation_memory:
         conversation_memory[user_id] = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
 
+    # Add user message
     conversation_memory[user_id].append(
         {"role": "user", "content": text}
     )
 
+    # Keep only recent messages (system + last MAX_HISTORY messages)
     conversation_memory[user_id] = (
         conversation_memory[user_id][:1] +
         conversation_memory[user_id][-MAX_HISTORY:]
     )
 
-    waiting = await message.reply_text("🤖 generating response...")
+    # Show typing indicator
+    waiting = await message.reply_text("🤖 Generating response...")
 
     try:
+        # Send typing action
         await context.bot.send_chat_action(
             chat_id=update.effective_chat.id,
             action=ChatAction.TYPING
         )
 
+        logger.info(f"User {user_id}: {text[:50]}...")
+
+        # Get AI response
         answer = await ask_ai(conversation_memory[user_id])
 
         if not answer:
@@ -378,6 +374,7 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not isinstance(answer, str):
             answer = str(answer)
 
+        # Try to convert LaTeX to text (optional)
         try:
             new_answer = LatexNodes2Text().latex_to_text(answer).strip()
         except Exception:
@@ -390,19 +387,23 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conversation_memory[user_id].pop()
             return
 
+        # Store assistant response
         conversation_memory[user_id].append(
             {"role": "assistant", "content": new_answer}
         )
 
+        # Keep conversation history trimmed
         conversation_memory[user_id] = (
             conversation_memory[user_id][:1] +
             conversation_memory[user_id][-MAX_HISTORY:]
         )
 
+        # Split response if too long (Telegram limit is ~4096 chars)
         limit = 3900
         if len(new_answer) <= limit:
-            await waiting.edit_text(new_answer)
+            await waiting.edit_text(new_answer, parse_mode=None)
         else:
+            # Split by paragraphs for readability
             parts = []
             text_left = new_answer
 
@@ -425,7 +426,10 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for part in parts[1:]:
                 await message.reply_text(part)
 
+        logger.info(f"Response sent to user {user_id}")
+
     except httpx.TimeoutException:
+        logger.warning(f"Timeout for user {user_id}")
         if conversation_memory[user_id] and conversation_memory[user_id][-1]["role"] == "user":
             conversation_memory[user_id].pop()
         await waiting.edit_text(
@@ -433,6 +437,7 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP Error for user {user_id}: {e.response.status_code}")
         if conversation_memory[user_id] and conversation_memory[user_id][-1]["role"] == "user":
             conversation_memory[user_id].pop()
 
@@ -441,59 +446,66 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if status == 400:
             msg = "📄 Your message is too large.\nPlease make it shorter."
         elif status == 401:
-            msg = "❌ Invalid API key."
+            msg = "❌ Invalid API key.\nPlease check your NVIDIA_API_KEY."
+        elif status == 404:
+            msg = "❌ Model not found.\nPlease check your MODEL configuration."
         elif status == 429:
             msg = "⚠️ Too many requests.\nPlease wait a minute."
         elif status >= 500:
             msg = "🚧 AI service is temporarily unavailable."
         else:
-            msg = "😕 Something went wrong.\nPlease try again."
+            msg = f"😕 Something went wrong (Error {status}).\nPlease try again."
 
         await waiting.edit_text(msg)
 
-    except Exception:
-        logging.exception("ai_chat failed")
+    except Exception as e:
+        logger.exception(f"Error in ai_chat for user {user_id}: {e}")
         if conversation_memory[user_id] and conversation_memory[user_id][-1]["role"] == "user":
             conversation_memory[user_id].pop()
         await waiting.edit_text(
             "😕 I could not process that message.\nPlease try a shorter or simpler one."
         )
-# -----------------------------
+
+
+# ===========================
+# Error Handler
+# ===========================
 
 async def error_handler(update, context):
+    """Log errors caused by updates."""
+    logger.exception(f"Error: {context.error}")
 
-    logging.exception(context.error)
 
-
-# -----------------------------
+# ===========================
+# Main
+# ===========================
 
 def main():
-
+    """Start the bot."""
     app = (
         Application.builder()
         .token(BOT_TOKEN)
         .build()
     )
 
+    # Add handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("clear", clear))
 
     app.add_handler(
-
         MessageHandler(
-
-            filters.TEXT &
-            ~filters.COMMAND,
-
+            filters.TEXT & ~filters.COMMAND,
             ai_chat
         )
-
     )
 
     app.add_error_handler(error_handler)
 
-    print("AI Bot Running...")
+    print("=" * 50)
+    print("🤖 Tensor AI Bot Starting...")
+    print(f"📌 Primary Model: {MODEL}")
+    print("=" * 50)
 
     app.run_polling()
 
