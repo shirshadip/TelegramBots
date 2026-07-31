@@ -1,7 +1,7 @@
 import httpx
 from config import *
 
-URL = "https://openrouter.ai/api/v1/chat/completions"
+URL = "https://integrate.api.nvidia.com/v"
 
 HEADERS = {
     "Authorization": f"Bearer {OPENROUTER_API_KEY}",

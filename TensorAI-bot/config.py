@@ -40,11 +40,7 @@ OPENROUTER_API_KEY = (
 # Default model fallback order
 # -------------------------------
 DEFAULT_MODELS = [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1:free",
-    "qwen/qwen3-32b:free",
-    "mistralai/mistral-small-3.2-24b-instruct:free",
-    "openai/gpt-4o-mini",
+    "nvidia/nemotron-3-super-120b-a12b"
 ]
 
 # -------------------------------
