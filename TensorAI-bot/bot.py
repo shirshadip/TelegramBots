@@ -13,6 +13,8 @@ import logging
 
 import httpx
 
+from pylatexenc.latex2text import LatexNodes2Text
+
 from config import *
 from ai import ask_ai
 
@@ -135,7 +137,7 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     waiting = await update.message.reply_text(
-        "🤖 Thinking..."
+        "🤖 generating response..."
     )
 
     try:
@@ -150,17 +152,18 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = await ask_ai(
             conversation_memory[user]
         )
+        new_answer=LatexNodes2Text().latex_to_text(answer)
 
         conversation_memory[user].append(
 
             {
                 "role": "assistant",
-                "content": answer
+                "content": new_answer
             }
 
         )
 
-        await waiting.edit_text(answer)
+        await waiting.edit_text(new_answer)
 
     except httpx.TimeoutException:
 
